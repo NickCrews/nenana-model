@@ -1,0 +1,19 @@
+[project]
+name = "nenana-model"
+version = "0.1.0"
+description = "Gaming the Nenana Ice Classic"
+authors = [
+    {name = "Nick Crews", email = "nicholas.b.crews@gmail.com"},
+]
+dependencies = [
+    "ibis-framework[duckdb]",
+    "altair",
+    "ipykernel",
+]
+requires-python = "==3.11.*"
+readme = "README.md"
+license = {text = "MIT"}
+
+
+[tool.pdm]
+distribution = false
