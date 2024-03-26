@@ -1,7 +1,13 @@
 # nenana-model
 
 
-## Data
+## Data Sources
+
+### Breakup times
+
+Pulled from https://doi.org/10.5067/CAQ58H42LQY2,
+then manually added data for 2022 and 2023, then converted
+to [ISO_8601](https://en.wikipedia.org/wiki/ISO_8601) format.
 
 ### [MEI](https://www.psl.noaa.gov/enso/mei)
 
