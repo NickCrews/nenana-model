@@ -25,3 +25,7 @@ of the year.
 
 Manually scraped from https://www.nenanaakiceclassic.com/ice on March 26, 2024
 
+
+### Historical Climate
+
+Uses re-analysis data from ERA5 climate model. See [download_era5.py]() for more info.

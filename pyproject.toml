@@ -6,9 +6,13 @@ authors = [
     {name = "Nick Crews", email = "nicholas.b.crews@gmail.com"},
 ]
 dependencies = [
-    "ibis-framework[duckdb]",
     "altair",
+    "cdsapi",
+    "ibis-framework[duckdb]",
     "ipykernel",
+    # cdsapi depends on pkg_resources but doesn't declare it
+    # https://github.com/ecmwf/cdsapi/pull/74
+    "setuptools",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"
