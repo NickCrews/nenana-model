@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import itertools
 import logging
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import cdsapi
 from cdsapi.api import Result
@@ -97,55 +98,83 @@ def _ignore_insecure_request_warning():
 _ignore_insecure_request_warning()
 
 
-def begin_export() -> Task:
+def batched(iterable: Iterable, n: int) -> Iterable[tuple]:
+    """batched('ABCDEFG', 3) → ABC DEF G"""
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while batch := tuple(itertools.islice(it, n)):
+        yield batch
+
+
+def needed_downloads() -> Iterable[tuple[str, dict]]:
+    """Get pairs of (download name, download options)
+
+    The CDS API can only handle 120k items per request.
+    So we split this into smaller requests by year.
+
+    Monitor https://cds.climate.copernicus.eu/cdsapp#!/yourrequests?tab=form
+    right after you make the requests to see if the task failed for
+    too many items. It tells you eg "your request has 180,000 items,
+    which exceeds the limit of 120,000", which is useful to figure out how
+    to split the requests.
+    """
     days = [f"{i:02}" for i in range(1, 32)]
     times = [f"{i:02}:00" for i in range(24)]
     years = [str(i) for i in range(1940, 2025)]
-    options = {
-        "product_type": "reanalysis",
-        "format": "grib",
-        "area": [64.6, -149.1, 64.4, -148.9],
-        "year": years,
-        "month": ["01", "02", "03", "04", "05"],
-        "day": days,
-        "time": times,
-        "variable": [
-            "mean_snowmelt_rate",
-            "surface_latent_heat_flux",
-            "surface_net_solar_radiation",
-            "surface_net_thermal_radiation",
-            "surface_sensible_heat_flux",
-        ],
-    }
-    return Task.new(options)
+    for year_batch in batched(years, 5):
+        name = f"{min(year_batch)}-{max(year_batch)}"
+        options = {
+            "product_type": "reanalysis",
+            "format": "grib",
+            "area": [64.6, -149.1, 64.4, -148.9],
+            "year": list(year_batch),
+            "month": ["01", "02", "03", "04", "05"],
+            "day": days,
+            "time": times,
+            "variable": [
+                "mean_snowmelt_rate",
+                "surface_latent_heat_flux",
+                "surface_net_solar_radiation",
+                "surface_net_thermal_radiation",
+                "surface_sensible_heat_flux",
+            ],
+        }
+        yield name, options
+
+
+def create_or_update_download(path: str | Path, options: dict[str, Any]) -> str:
+    path = Path(path).absolute()
+    if path.exists():
+        logger.debug(f"Skipping because {path} exists")
+        return "completed"
+    cache_path = path.with_suffix(".requestid")
+    if not cache_path.exists():
+        logger.debug("Beginning export")
+        task = Task.new(options)
+        task.to_file(cache_path)
+    else:
+        logger.debug(f"Loading taskfrom {cache_path}")
+        task = Task.from_file(cache_path)
+    if task.status == "completed":
+        task.download(path)
+    logger.debug("Task has status %s", task.status)
+    return task.status
 
 
 def main(
-    path: str | Path | None = None,
-    *,
     log_level: str | int = "INFO",
 ) -> str:
     logging.basicConfig(level=log_level)
-    if path is None:
-        path = "data/era5.grib"
-    path = Path(path).absolute()
-    if path.exists():
-        logger.info(f"Skipping because {path} exists")
-        return
-    cache_path = path.with_suffix(".requestid")
-    if not cache_path.exists():
-        logger.info("Beginning export")
-        task = begin_export()
-        task.to_file(cache_path)
-    else:
-        logger.info(f"Loading taskfrom {cache_path}")
-        task = Task.from_file(cache_path)
-    if task.status == "completed":
-        logger.info("Task is complete. Downloading!")
-        task.download(path)
-    else:
-        logger.info("Task is not complete.")
-    return task.status
+    folder = Path("data")
+    statuses = {}
+    for name, options in needed_downloads():
+        path = folder / f"{name}.grib"
+        status = create_or_update_download(path, options)
+        statuses[name] = status
+    for name, status in statuses.items():
+        logger.info(f"{name}: {status}")
+    return statuses
 
 
 if __name__ == "__main__":
